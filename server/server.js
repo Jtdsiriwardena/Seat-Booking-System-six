@@ -14,7 +14,6 @@ const { swaggerUi, swaggerDocs } = require('./swagger');
 
 const app = express();
 
-// Only use clustering in non-production environments
 if (process.env.NODE_ENV !== 'production' && cluster.isMaster) {
     const numCPUs = os.cpus().length;
     console.log(`Master process is running with PID: ${process.pid}`);
@@ -30,16 +29,22 @@ if (process.env.NODE_ENV !== 'production' && cluster.isMaster) {
     });
 
 } else {
-    // Database connection
+
     mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
         .then(() => console.log('MongoDB connected'))
         .catch(err => console.log(err));
 
-    // Middleware
-    app.use(cors({
-        origin: process.env.CLIENT_URL, // Use environment variable for client URL
+ 
+    const corsOptions = {
+        origin: process.env.CLIENT_URL,
         credentials: true,
-    }));
+    };
+
+    app.use(cors(corsOptions));
+
+
+    app.options('*', cors(corsOptions));
+
 
     app.use((req, res, next) => {
         res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
@@ -47,15 +52,16 @@ if (process.env.NODE_ENV !== 'production' && cluster.isMaster) {
         next();
     });
 
+
     app.use(bodyParser.json());
 
-    // JWT Authentication Middleware
+
     const authMiddleware = (req, res, next) => {
-        const token = req.headers.authorization?.split(' ')[1];
+        const token = req.headers.authorization?.split(' ')[1]; 
         if (!token) return res.status(401).json({ message: 'No token provided' });
 
         try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, process.env.JWT_SECRET); 
             req.internId = decoded.id;
             next();
         } catch (error) {
@@ -63,24 +69,24 @@ if (process.env.NODE_ENV !== 'production' && cluster.isMaster) {
         }
     };
 
-    // Routes
+
     app.use('/api/auth', authRoutes);
     app.use('/api/bookings', authMiddleware, bookingRoutes);
     app.use('/api/interns', internRoutes);
 
+ 
     const holidayRoutes = require('./routes/holidayRoutes');
     app.use('/api', holidayRoutes);
 
-    // Logging Middleware
+
     app.use((req, res, next) => {
         console.log(`Request URL: ${req.originalUrl}`);
         next();
     });
 
-    // Swagger Docs
+
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-    // Server Setup
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
         console.log(`Worker ${process.pid} is running on port ${PORT}`);
